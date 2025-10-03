@@ -67,7 +67,7 @@ jobs:
           GOOS: linux
         run: |
           go mod download all
-          go build -o ./echoris .
+          go build -o ./cli/cmd .
 
       - name: Run binary
         run: |

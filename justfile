@@ -49,7 +49,7 @@ build:
 
     echo "Building devops for ${OS}/${ARCH}..."
     go mod download all
-    CGO_ENABLED=0 GOOS="${OS}" GOARCH="${ARCH}" go build -o ./echoris .
+    CGO_ENABLED=0 GOOS="${OS}" GOARCH="${ARCH}" go build -o ./cli/cmd .
     echo "Built binary for devops successfully!"
 
 # Update the project dependencies
