@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package logaggregator;
+
+option go_package = "github.com/jgfranco17/echoris/service/protos";
+
+service LogAggregator {
+  rpc SendLogs(LogBatch) returns (SendLogsResponse);
+  rpc QueryLogs(QueryRequest) returns (LogBatch);
+}
+
+message LogEvent {
+  string timestamp = 1;
+  string service = 2;
+  string level = 3;
+  string message = 4;
+  map<string, string> fields = 5;
+}
+
+message LogBatch {
+  repeated LogEvent events = 1;
+}
+
+message SendLogsResponse {
+  bool ok = 1;
+}
+
+message QueryRequest {
+  string service = 1;
+  string level = 2;
+}

@@ -11,3 +11,6 @@ node_modules
 # Go workspace
 go.work
 go.work.sum
+
+# Protobufs
+service/protos/*.pb*.go
