@@ -2,6 +2,8 @@ module github.com/jgfranco17/echoris
 
 go 1.24.3
 
+replace github.com/jgfranco17/echoris/service/protos => ./service/protos
+
 require (
 	github.com/fatih/color v1.18.0
 	github.com/gin-contrib/cors v1.7.6

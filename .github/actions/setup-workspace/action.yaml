@@ -1,0 +1,39 @@
+---
+name: "Setup Project Workspace"
+description: "Configure Go and prepare the workspace"
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Golang
+      uses: actions/setup-go@v5
+      with:
+        go-version: "1.24"
+
+    - name: Install Just
+      uses: extractions/setup-just@v2
+
+    - name: Set up Protoc
+      shell: bash
+      run: |
+        PROTOC_VERSION=30.2
+        PB_REL="https://github.com/protocolbuffers/protobuf/releases"
+        curl -LO $PB_REL/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip
+        unzip protoc-30.2-linux-x86_64.zip -d $HOME/.local
+        rm protoc-${PROTOC_VERSION}-linux-x86_64.zip
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
+        protoc --version
+
+        go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+        go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+        echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+    - name: Build protos
+      shell: bash
+      run: |
+        just protos
+
+    - name: Install Go modules
+      shell: bash
+      run: |
+        just tidy
