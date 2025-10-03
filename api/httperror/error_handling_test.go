@@ -15,7 +15,7 @@ func TestHandeHTTPError(t *testing.T) {
 		inputErr := New(context.Background(), 500, "Some error")
 		response := getErrorResponse(context.Background(), inputErr)
 
-		assert.Equal(t, 400, response.Status)
+		assert.Equal(t, 500, response.Status)
 		assert.Equal(t, errorBody{
 			Message: "Some error",
 		}, response.Body)
@@ -28,7 +28,7 @@ func TestHandeHTTPError(t *testing.T) {
 		err := fmt.Errorf("Outer error: %w", inputErr)
 		response := getErrorResponse(context.Background(), err)
 
-		assert.Equal(t, 400, response.Status)
+		assert.Equal(t, 500, response.Status)
 		assert.Equal(t, errorBody{
 			Message: "Outer error: Some error",
 		}, response.Body)
@@ -41,7 +41,7 @@ func TestHandeHTTPError(t *testing.T) {
 
 		response := getErrorResponse(context.Background(), inputErr)
 
-		assert.Equal(t, 400, response.Status)
+		assert.Equal(t, 500, response.Status)
 		assert.Equal(t, errorBody{
 			Message: "Some error: Inner error",
 		}, response.Body)
@@ -54,7 +54,7 @@ func TestHandeHTTPError(t *testing.T) {
 		inputErr := New(ctx, 500, "Some error")
 		response := getErrorResponse(context.Background(), inputErr)
 
-		assert.Equal(t, 400, response.Status)
+		assert.Equal(t, 500, response.Status)
 		assert.Equal(t, errorBody{
 			Message:   "Some error",
 			RequestID: "4dfdcc88-2f3e-41ce-9757-4144cb3974a4",
@@ -68,7 +68,7 @@ func TestHandeHTTPError(t *testing.T) {
 		inputErr := New(ctx, 500, "Some error")
 		response := getErrorResponse(context.Background(), inputErr)
 
-		assert.Equal(t, 400, response.Status)
+		assert.Equal(t, 500, response.Status)
 		assert.Equal(t, errorBody{
 			Message:        "Some error",
 			ServiceVersion: "1.23.5",

@@ -3,6 +3,7 @@ package httperror
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/jgfranco17/echoris/api/logging"
 
@@ -41,17 +42,16 @@ func getErrorMetadataFromContext(ctx context.Context) errorBody {
 // Get an error response from a core error.
 // Currently the messages are generic.
 func getErrorResponse(ctx context.Context, err error) errorResponse {
-
 	errorMessage := err.Error()
 
-	var inputErr HttpError
-	if errors.As(err, &inputErr) {
-		body := getErrorMetadataFromContext(inputErr.Context())
+	var httpErr HttpError
+	if errors.As(err, &httpErr) {
+		body := getErrorMetadataFromContext(httpErr.Context())
 		body.Message = errorMessage
-		return errorResponse{Status: 400, Body: body}
+		return errorResponse{Status: httpErr.Status(), Body: body}
 	}
 	body := getErrorMetadataFromContext(ctx)
-	body.Message = "Internal Server Error"
+	body.Message = fmt.Sprintf("Internal Server Error: %s", errorMessage)
 	return errorResponse{Status: 500, Body: body}
 
 }
