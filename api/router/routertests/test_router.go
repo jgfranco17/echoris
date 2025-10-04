@@ -75,7 +75,13 @@ func (s *TestServer) WithSystemRoutes() *TestServer {
 }
 
 func (s *TestServer) WithV0Routes() *TestServer {
-	v0.SetRoutes(s.service.Router)
+	mockClient := &v0.MockLogClient{}
+	v0.SetRoutes(s.service.Router, mockClient)
+	return s
+}
+
+func (s *TestServer) WithV0RoutesAndClient(client v0.LogClient) *TestServer {
+	v0.SetRoutes(s.service.Router, client)
 	return s
 }
 

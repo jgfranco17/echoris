@@ -11,28 +11,37 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-// gRPC client connection (can reuse)
-var grpcConn *grpc.ClientConn
-var grpcClient pb.LogAggregatorClient
-
-func initGRPC() error {
-	var err error
-	creds := grpc.WithTransportCredentials(insecure.NewCredentials())
-	grpcConn, err = grpc.NewClient("worker-service:50051", creds)
-	if err != nil {
-		return err
-	}
-	grpcClient = pb.NewLogAggregatorClient(grpcConn)
-	return nil
+// LogClient defines the interface for log operations
+type LogClient interface {
+	ForwardLogs(ctx context.Context, batch []events.Entry) error
+	FetchLogs(ctx context.Context, service, level string) ([]events.Entry, error)
+	Close() error
 }
 
-func forwardLogs(batch []events.Entry) error {
-	if grpcClient == nil {
-		if err := initGRPC(); err != nil {
-			return err
-		}
+// GRPCLogClient implements LogClient using gRPC
+type GRPCLogClient struct {
+	conn   *grpc.ClientConn
+	client pb.LogAggregatorClient
+}
+
+// NewGRPCLogClient creates a new gRPC log client
+func NewGRPCLogClient(address string) (*GRPCLogClient, error) {
+	creds := grpc.WithTransportCredentials(insecure.NewCredentials())
+	conn, err := grpc.NewClient(address, creds)
+	if err != nil {
+		return nil, err
 	}
 
+	client := pb.NewLogAggregatorClient(conn)
+
+	return &GRPCLogClient{
+		conn:   conn,
+		client: client,
+	}, nil
+}
+
+// ForwardLogs sends a batch of log entries to the log aggregator
+func (c *GRPCLogClient) ForwardLogs(ctx context.Context, batch []events.Entry) error {
 	var pbEvents []*pb.LogEvent
 	for _, e := range batch {
 		pbEvents = append(pbEvents, &pb.LogEvent{
@@ -44,20 +53,15 @@ func forwardLogs(batch []events.Entry) error {
 		})
 	}
 
-	_, err := grpcClient.SendLogs(context.Background(), &pb.LogBatch{
+	_, err := c.client.SendLogs(ctx, &pb.LogBatch{
 		Events: pbEvents,
 	})
 	return err
 }
 
-func fetchLogs(service, level string) ([]events.Entry, error) {
-	if grpcClient == nil {
-		if err := initGRPC(); err != nil {
-			return nil, err
-		}
-	}
-
-	resp, err := grpcClient.QueryLogs(context.Background(), &pb.QueryRequest{
+// FetchLogs retrieves log entries from the log aggregator
+func (c *GRPCLogClient) FetchLogs(ctx context.Context, service, level string) ([]events.Entry, error) {
+	resp, err := c.client.QueryLogs(ctx, &pb.QueryRequest{
 		Service: service,
 		Level:   level,
 	})
@@ -78,4 +82,12 @@ func fetchLogs(service, level string) ([]events.Entry, error) {
 	}
 
 	return logs, nil
+}
+
+// Close closes the gRPC connection
+func (c *GRPCLogClient) Close() error {
+	if c.conn != nil {
+		return c.conn.Close()
+	}
+	return nil
 }

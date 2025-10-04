@@ -80,7 +80,15 @@ func getRouter() (*gin.Engine, error) {
 	router.Use(logRequest())
 	router.Use(system.PrometheusMiddleware())
 	system.SetSystemRoutes(router)
-	err := v0.SetRoutes(router)
+
+	// Create gRPC client
+	client, err := v0.NewGRPCLogClient("worker-service:50051")
+	if err != nil {
+		logger.WithError(err).Error("Failed to create gRPC client")
+		return nil, fmt.Errorf("Failed to create gRPC client: %w", err)
+	}
+
+	err = v0.SetRoutes(router, client)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to set v0 routes: %w", err)
 	}
