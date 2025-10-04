@@ -82,7 +82,19 @@ func getRouter() (*gin.Engine, error) {
 	system.SetSystemRoutes(router)
 
 	// Create gRPC client
-	client, err := v0.NewGRPCLogClient("worker-service:50051")
+	workerAddr := os.Getenv("WORKER_SERVICE_HOST")
+	if workerAddr == "" {
+		workerAddr = "localhost"
+	}
+	workerPort := os.Getenv("WORKER_SERVICE_PORT")
+	if workerPort == "" {
+		workerPort = "50051"
+	}
+
+	grpcAddr := fmt.Sprintf("%s:%s", workerAddr, workerPort)
+	logger.WithField("grpc_address", grpcAddr).Info("Connecting to worker service")
+
+	client, err := v0.NewGRPCLogClient(grpcAddr)
 	if err != nil {
 		logger.WithError(err).Error("Failed to create gRPC client")
 		return nil, fmt.Errorf("Failed to create gRPC client: %w", err)

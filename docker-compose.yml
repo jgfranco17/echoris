@@ -1,0 +1,60 @@
+# Echoris Suite
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: echoris-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres # pragma: allowlist secret
+      POSTGRES_DB: logs
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: container/worker.Dockerfile
+    container_name: echoris-worker
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres # pragma: allowlist secret
+      POSTGRES_DB: logs
+      POSTGRES_SSLMODE: disable
+    ports:
+      - "50051:50051"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    command: ["-use-env", "-log-level", "info"]
+
+  api:
+    build:
+      context: .
+      dockerfile: container/api.Dockerfile
+    container_name: echoris-api
+    environment:
+      WORKER_SERVICE_HOST: worker
+      WORKER_SERVICE_PORT: 50051
+    ports:
+      - "8000:8000"
+    depends_on:
+      - worker
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local

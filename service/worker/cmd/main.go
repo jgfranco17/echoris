@@ -2,65 +2,104 @@ package main
 
 import (
 	"context"
-	"sync"
+	"flag"
+	"fmt"
+	"net"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	pb "github.com/jgfranco17/echoris/service/protos"
+	"github.com/jgfranco17/echoris/service/worker/server"
+	"github.com/jgfranco17/echoris/service/worker/storage"
+	"github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
 )
 
-type LogEvent struct {
-	Timestamp time.Time
-	Service   string
-	Level     string
-	Message   string
-	Fields    map[string]string
-}
+func main() {
+	port := flag.Int("port", 50051, "The server port")
+	connString := flag.String("conn", "", "PostgreSQL connection string")
+	logLevel := flag.String("log-level", "info", "Log level (debug, info, warn, error)")
+	useEnv := flag.Bool("use-env", false, "Use environment variables for storage configuration")
+	flag.Parse()
 
-type server struct {
-	pb.UnimplementedLogAggregatorServer
-	mu   sync.RWMutex
-	logs []LogEvent
-}
-
-func (s *server) SendLogs(ctx context.Context, batch *pb.LogBatch) (*pb.SendLogsResponse, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	for _, e := range batch.Events {
-		t, err := time.Parse(time.RFC3339Nano, e.Timestamp)
-		if err != nil {
-			t = time.Now().UTC()
-		}
-		s.logs = append(s.logs, LogEvent{
-			Timestamp: t,
-			Service:   e.Service,
-			Level:     e.Level,
-			Message:   e.Message,
-			Fields:    e.Fields,
-		})
+	// Configure logger
+	logger := logrus.New()
+	logger.SetFormatter(&logrus.JSONFormatter{})
+	level, err := logrus.ParseLevel(*logLevel)
+	if err != nil {
+		logger.Warn("Invalid log level, defaulting to info")
+		level = logrus.InfoLevel
 	}
-	return &pb.SendLogsResponse{Ok: true}, nil
-}
+	logger.SetLevel(level)
 
-func (s *server) QueryLogs(ctx context.Context, req *pb.QueryRequest) (*pb.LogBatch, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	logger.WithFields(logrus.Fields{
+		"port": *port,
+	}).Info("Starting log aggregator service")
 
-	var resp pb.LogBatch
-	for _, e := range s.logs {
-		if req.Service != "" && e.Service != req.Service {
-			continue
+	// Initialize database storage with dependency injection
+	var store storage.Storage
+	if *useEnv {
+		// Load configuration from environment variables
+		logger.Info("Loading storage configuration from environment")
+		store, err = storage.NewStorageFromEnv()
+	} else {
+		// Use command-line arguments
+		conn := *connString
+		if conn == "" {
+			logger.Fatal("No PostgreSQL connection defined")
 		}
-		if req.Level != "" && e.Level != req.Level {
-			continue
+
+		config := storage.Config{
+			ConnString: conn,
 		}
-		resp.Events = append(resp.Events, &pb.LogEvent{
-			Timestamp: e.Timestamp.Format(time.RFC3339Nano),
-			Service:   e.Service,
-			Level:     e.Level,
-			Message:   e.Message,
-			Fields:    e.Fields,
-		})
+
+		store, err = storage.NewStorage(config)
 	}
-	return &resp, nil
+
+	if err != nil {
+		logger.WithError(err).Fatal("Failed to initialize storage")
+	}
+	defer store.Close()
+
+	// Verify database connection
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := store.HealthCheck(ctx); err != nil {
+		logger.WithError(err).Fatal("Database health check failed")
+	}
+	logger.Info("Database connection established")
+
+	// Create gRPC server
+	grpcServer := grpc.NewServer()
+	logServer := server.NewLogAggregatorServer(store, logger)
+	pb.RegisterLogAggregatorServer(grpcServer, logServer)
+
+	// Start listening
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
+	if err != nil {
+		logger.WithError(err).Fatal("Failed to listen")
+	}
+
+	// Handle graceful shutdown
+	done := make(chan os.Signal, 1)
+	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		logger.WithField("port", *port).Info("Server listening")
+		if err := grpcServer.Serve(listener); err != nil {
+			logger.WithError(err).Fatal("Failed to serve")
+		}
+	}()
+
+	// Wait for shutdown signal
+	<-done
+	logger.Info("Shutting down server...")
+
+	// Graceful shutdown
+	grpcServer.GracefulStop()
+	logServer.Close()
+
+	logger.Info("Server stopped")
 }

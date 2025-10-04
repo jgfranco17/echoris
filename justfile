@@ -57,3 +57,11 @@ update-deps:
     @echo "Updating project dependencies..."
     go get -u ./...
     go mod tidy
+
+# Start the Docker services
+up:
+    @docker compose up
+
+# Stop the Docker services
+down:
+    @docker compose down -v
